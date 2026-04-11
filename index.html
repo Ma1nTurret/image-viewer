@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이미지 스크롤 뷰어 PRO</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f5f5;
+}
+
+header {
+  padding: 10px;
+  font-size: 16px;
+  background: #222;
+  color: white;
+  text-align: center;
+}
+
+.upload-box {
+  padding: 12px;
+  text-align: center;
+  background: white;
+  border-bottom: 1px solid #ddd;
+}
+
+.page-indicator {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  z-index: 1000;
+}
+
+.image-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+  gap: 20px;
+}
+
+.image-item {
+  text-align: center;
+}
+
+.filename {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #555;
+}
+
+img {
+  max-width: 95%;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: pan-y;
+}
+</style>
+</head>
+
+<body>
+
+<header>📸 이미지 스크롤 뷰어 PRO</header>
+
+<div class="upload-box">
+  <input type="file" id="fileInput" accept="image/*" multiple capture="environment">
+</div>
+
+<div class="page-indicator" id="pageIndicator">0 / 0</div>
+<div class="image-container" id="imageContainer"></div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const container = document.getElementById('imageContainer');
+const indicator = document.getElementById('pageIndicator');
+
+let imageElements = [];
+
+// ===== 파일명 파싱 =====
+function parseFileName(name) {
+  const match = name.match(/IMG_(\d+)(?:_(\d+))?/i);
+  if (!match) return { main: 0, sub: 0 };
+
+  return {
+    main: parseInt(match[1], 10),
+    sub: match[2] ? parseInt(match[2], 10) : 0
+  };
+}
+
+// ===== 정렬 =====
+function sortFiles(files) {
+  return [...files].sort((a, b) => {
+    const A = parseFileName(a.name);
+    const B = parseFileName(b.name);
+
+    if (A.main !== B.main) return A.main - B.main;
+    return A.sub - B.sub;
+  });
+}
+
+// ===== 이미지 리사이즈 =====
+function resizeImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = e => img.src = e.target.result;
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxWidth = 1000;
+
+      const scale = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+// ===== 페이지 표시 =====
+function updatePageIndicator() {
+  let current = 0;
+
+  for (let i = 0; i < imageElements.length; i++) {
+    const rect = imageElements[i].getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.5) {
+      current = i + 1;
+    }
+  }
+
+  indicator.textContent = `${current} / ${imageElements.length}`;
+}
+
+// ===== 파일 로딩 =====
+fileInput.addEventListener('change', async (event) => {
+  container.innerHTML = "";
+  imageElements = [];
+
+  const sortedFiles = sortFiles(event.target.files);
+
+  const results = await Promise.all(
+    sortedFiles.map(async file => ({
+      file,
+      src: await resizeImage(file)
+    }))
+  );
+
+  results.forEach(({ file, src }) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = "image-item";
+
+    const filename = document.createElement('div');
+    filename.className = "filename";
+    filename.textContent = file.name;
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.loading = "lazy";
+
+    wrapper.appendChild(filename);
+    wrapper.appendChild(img);
+    container.appendChild(wrapper);
+
+    imageElements.push(wrapper);
+  });
+
+  updatePageIndicator();
+});
+
+// ===== 스크롤 =====
+window.addEventListener('scroll', updatePageIndicator);
+</script>
+
+</body>
+</html>
