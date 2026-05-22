@@ -1,192 +1,228 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>이미지 스크롤 뷰어 PRO</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>초고속 모바일 이미지 뷰어</title>
+    <style>
+        /* 기본 모바일 친화적 리셋 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #1a1a1a; color: white; font-family: -apple-system, sans-serif; overscroll-behavior: none; }
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f5f5f5;
-}
+        /* 상단 고정 헤더 */
+        #header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 60px;
+            background-color: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
 
-header {
-  padding: 10px;
-  font-size: 16px;
-  background: #222;
-  color: white;
-  text-align: center;
-}
+        /* 왼쪽: 파일 업로드 버튼 */
+        .file-upload-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-upload-btn {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: manipulation; /* 모바일 터치 최적화 */
+        }
+        .file-upload-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0; top: 0; opacity: 0; cursor: pointer;
+        }
 
-.upload-box {
-  padding: 12px;
-  text-align: center;
-  background: white;
-  border-bottom: 1px solid #ddd;
-}
+        /* 오른쪽: 페이지 이동 드롭다운 */
+        #page-jump {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
 
-.page-indicator {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  z-index: 1000;
-}
+        /* 메인 이미지 뷰어 영역 */
+        #viewer-container {
+            margin-top: 60px; /* 헤더 높이만큼 띄움 */
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-.image-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 10px;
-  gap: 20px;
-}
+        /* 개별 이미지 컨테이너 (로딩 전 빈 공간 역할) */
+        .img-container {
+            width: 100%;
+            max-width: 800px; /* PC에서는 최대 너비 제한 */
+            min-height: 80vh; /* 로딩 전 스크롤 튀김 방지를 위한 기본 높이 */
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #222; /* 로딩 전 배경색 */
+            border-bottom: 2px solid #111;
+        }
 
-.image-item {
-  text-align: center;
-}
+        /* 실제 렌더링되는 이미지 */
+        .img-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
 
-.filename {
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #555;
-}
-
-img {
-  max-width: 95%;
-  border-radius: 10px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-  user-select: none;
-  -webkit-user-drag: none;
-  touch-action: pan-y;
-}
-</style>
+        /* #1, #2 표시 뱃지 */
+        .page-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+        }
+    </style>
 </head>
-
 <body>
 
-<header>📸 이미지 스크롤 뷰어 PRO</header>
+    <header id="header">
+        <div class="file-upload-wrapper">
+            <button class="file-upload-btn">📁 파일 열기</button>
+            <input type="file" id="file-input" multiple accept="image/*">
+        </div>
+        <select id="page-jump">
+            <option value="">페이지 이동</option>
+        </select>
+    </header>
 
-<div class="upload-box">
-  <input type="file" id="fileInput" accept="image/*" multiple>
-</div>
+    <main id="viewer-container"></main>
 
-<div class="page-indicator" id="pageIndicator">0 / 0</div>
-<div class="image-container" id="imageContainer"></div>
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const viewerContainer = document.getElementById('viewer-container');
+        const pageJumpSelect = document.getElementById('page-jump');
+        let imageFiles = [];
 
-<script>
-const fileInput = document.getElementById('fileInput');
-const container = document.getElementById('imageContainer');
-const indicator = document.getElementById('pageIndicator');
+        // 1. 파일이 선택되었을 때 실행되는 함수
+        fileInput.addEventListener('change', (e) => {
+            // 선택된 파일들을 배열로 변환하고 이름순으로 정렬
+            imageFiles = Array.from(e.target.files).sort((a, b) => a.name.localeCompare(b.name));
+            if (imageFiles.length === 0) return;
 
-let imageElements = [];
+            initViewer();
+        });
 
-// ===== 파일명 파싱 =====
-function parseFileName(name) {
-  const match = name.match(/IMG_(\d+)(?:_(\d+))?/i);
-  if (!match) return { main: 0, sub: 0 };
+        // 2. 뷰어 초기화 (1000장의 빈 상자 만들기 및 드롭다운 세팅)
+        function initViewer() {
+            viewerContainer.innerHTML = ''; // 기존 내용 지우기
+            pageJumpSelect.innerHTML = '<option value="">페이지 이동</option>';
 
-  return {
-    main: parseInt(match[1], 10),
-    sub: match[2] ? parseInt(match[2], 10) : 0
-  };
-}
+            imageFiles.forEach((file, index) => {
+                // 상자(Container) 생성
+                const container = document.createElement('div');
+                container.className = 'img-container';
+                container.id = `page-${index}`;
+                container.dataset.index = index; // 인덱스 저장
+                
+                // 로딩 스피너 역할의 텍스트 미리 넣기
+                container.innerHTML = `<span style="color:#666;">Loading #${index + 1}...</span>`;
+                
+                viewerContainer.appendChild(container);
 
-// ===== 정렬 =====
-function sortFiles(files) {
-  return [...files].sort((a, b) => {
-    const A = parseFileName(a.name);
-    const B = parseFileName(b.name);
+                // 드롭다운에 페이지 번호 추가
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `#${index + 1} 페이지`;
+                pageJumpSelect.appendChild(option);
 
-    if (A.main !== B.main) return A.main - B.main;
-    return A.sub - B.sub;
-  });
-}
+                // 상자들을 관찰자(Observer)에 등록
+                imageObserver.observe(container);
+            });
+            
+            // 맨 처음으로 스크롤 이동
+            window.scrollTo(0, 0);
+        }
 
-// ===== 이미지 리사이즈 =====
-function resizeImage(file) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const reader = new FileReader();
+        // 3. 성능 최적화의 핵심: Intersection Observer (가상 로딩 구현)
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                const container = entry.target;
+                const index = container.dataset.index;
 
-    reader.onload = e => img.src = e.target.result;
+                // 상자가 화면에 가까워졌을 때 (렌더링)
+                if (entry.isIntersecting) {
+                    if (!container.dataset.loaded) {
+                        const file = imageFiles[index];
+                        const imgUrl = URL.createObjectURL(file);
+                        
+                        container.innerHTML = `
+                            <div class="page-badge">#${Number(index) + 1}</div>
+                            <img src="${imgUrl}" alt="page ${index + 1}">
+                        `;
+                        container.dataset.loaded = "true";
+                    }
+                } 
+                // 상자가 화면에서 멀어졌을 때 (메모리 해제)
+                else {
+                    if (container.dataset.loaded) {
+                        // 스크롤이 튀지 않도록 현재 그려진 이미지의 높이를 상자에 고정시킴
+                        const currentHeight = container.getBoundingClientRect().height;
+                        container.style.minHeight = `${currentHeight}px`;
+                        
+                        // 내용물(이미지)을 삭제하여 메모리 반환
+                        container.innerHTML = `<span style="color:#666;">Loading #${Number(index) + 1}...</span>`;
+                        container.removeAttribute('dataset.loaded');
+                        delete container.dataset.loaded;
+                    }
+                }
+            });
+        }, {
+            // 화면 위아래로 150% 만큼의 여유 공간을 두고 미리 로딩 시작
+            rootMargin: "150% 0px 150% 0px" 
+        });
 
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxWidth = 1000;
+        // 4. 페이지 점프 (드롭다운 변경 시) 기능
+        pageJumpSelect.addEventListener('change', (e) => {
+            const targetIndex = e.target.value;
+            if (targetIndex === "") return;
 
-      const scale = Math.min(1, maxWidth / img.width);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
+            const targetContainer = document.getElementById(`page-${targetIndex}`);
+            if (targetContainer) {
+                // 해당 상자로 부드럽게 스크롤 이동 (상단 헤더 높이 60px을 고려하여 이동)
+                const headerOffset = 60;
+                const elementPosition = targetContainer.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
 
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
-// ===== 페이지 표시 =====
-function updatePageIndicator() {
-  let current = 0;
-
-  for (let i = 0; i < imageElements.length; i++) {
-    const rect = imageElements[i].getBoundingClientRect();
-    if (rect.top < window.innerHeight * 0.5) {
-      current = i + 1;
-    }
-  }
-
-  indicator.textContent = `${current} / ${imageElements.length}`;
-}
-
-// ===== 파일 로딩 =====
-fileInput.addEventListener('change', async (event) => {
-  container.innerHTML = "";
-  imageElements = [];
-
-  const sortedFiles = sortFiles(event.target.files);
-
-  const results = await Promise.all(
-    sortedFiles.map(async file => ({
-      file,
-      src: await resizeImage(file)
-    }))
-  );
-
-  results.forEach(({ file, src }) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = "image-item";
-
-    const filename = document.createElement('div');
-    filename.className = "filename";
-    filename.textContent = file.name;
-
-    const img = document.createElement('img');
-    img.src = src;
-    img.loading = "lazy";
-
-    wrapper.appendChild(filename);
-    wrapper.appendChild(img);
-    container.appendChild(wrapper);
-
-    imageElements.push(wrapper);
-  });
-
-  updatePageIndicator();
-});
-
-// ===== 스크롤 =====
-window.addEventListener('scroll', updatePageIndicator);
-</script>
-
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: "auto" // 모바일에서는 즉시 이동(auto)이 더 안정적임
+                });
+            }
+            
+            // 이동 후 드롭다운 초기화
+            e.target.value = "";
+        });
+    </script>
 </body>
 </html>
