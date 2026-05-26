@@ -24,23 +24,31 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
-        /* 왼쪽: 파일 업로드 버튼 */
+        /* 왼쪽: 업로드 버튼 영역 */
+        .upload-group {
+            display: flex;
+            gap: 10px;
+        }
         .file-upload-wrapper {
             position: relative;
             overflow: hidden;
             display: inline-block;
         }
-        .file-upload-btn {
-            background-color: #007aff;
+        
+        /* 버튼 디자인 (폴더 버튼은 색상을 다르게) */
+        .btn {
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 8px 12px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             cursor: pointer;
-            touch-action: manipulation; /* 모바일 터치 최적화 */
+            touch-action: manipulation;
         }
+        .btn-file { background-color: #555; }
+        .btn-folder { background-color: #007aff; } /* 폴더 열기 강조 */
+
         .file-upload-wrapper input[type=file] {
             font-size: 100px;
             position: absolute;
@@ -52,44 +60,42 @@
             background-color: #333;
             color: white;
             border: 1px solid #555;
-            padding: 10px;
+            padding: 8px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 14px;
             outline: none;
             cursor: pointer;
             touch-action: manipulation;
+            max-width: 120px;
         }
 
         /* 메인 이미지 뷰어 영역 */
         #viewer-container {
-            margin-top: 60px; /* 헤더 높이만큼 띄움 */
+            margin-top: 60px;
             width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
-        /* 개별 이미지 컨테이너 (로딩 전 빈 공간 역할) */
         .img-container {
             width: 100%;
-            max-width: 800px; /* PC에서는 최대 너비 제한 */
-            min-height: 80vh; /* 로딩 전 스크롤 튀김 방지를 위한 기본 높이 */
+            max-width: 800px;
+            min-height: 80vh;
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #222; /* 로딩 전 배경색 */
+            background-color: #222;
             border-bottom: 2px solid #111;
         }
 
-        /* 실제 렌더링되는 이미지 */
         .img-container img {
             width: 100%;
             height: auto;
             display: block;
         }
 
-        /* #1, #2 표시 뱃지 */
         .page-badge {
             position: absolute;
             top: 10px;
@@ -107,9 +113,17 @@
 <body>
 
     <header id="header">
-        <div class="file-upload-wrapper">
-            <button class="file-upload-btn">📁 파일 열기</button>
-            <input type="file" id="file-input" multiple accept="image/*">
+        <div class="upload-group">
+            <!-- 1. 기존 파일 여러개 선택 버튼 -->
+            <div class="file-upload-wrapper">
+                <button class="btn btn-file">📄 파일선택</button>
+                <input type="file" id="file-input" multiple accept="image/*">
+            </div>
+            <!-- 2. 신규 폴더 통째로 선택 버튼 (webkitdirectory 속성 추가) -->
+            <div class="file-upload-wrapper">
+                <button class="btn btn-folder">📁 폴더열기</button>
+                <input type="file" id="folder-input" webkitdirectory directory multiple>
+            </div>
         </div>
         <select id="page-jump">
             <option value="">페이지 이동</option>
@@ -120,57 +134,63 @@
 
     <script>
         const fileInput = document.getElementById('file-input');
+        const folderInput = document.getElementById('folder-input');
         const viewerContainer = document.getElementById('viewer-container');
         const pageJumpSelect = document.getElementById('page-jump');
         let imageFiles = [];
 
-        // 1. 파일이 선택되었을 때 실행되는 함수
-        fileInput.addEventListener('change', (e) => {
-            // 선택된 파일들을 배열로 변환하고 이름순으로 정렬
-            imageFiles = Array.from(e.target.files).sort((a, b) => a.name.localeCompare(b.name));
-            if (imageFiles.length === 0) return;
+        // 파일 및 폴더 업로드 공통 처리 함수
+        function processFiles(files) {
+            // 1. 이미지 파일만 걸러내기 (폴더 안의 txt, zip 파일 등 무시)
+            let filteredFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
 
+            if (filteredFiles.length === 0) {
+                alert("이미지 파일을 찾을 수 없습니다.");
+                return;
+            }
+
+            // 2. 파일 이름순 정렬 (숫자 크기를 인식하여 1, 2, 10 순서로 완벽 정렬)
+            filteredFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            
+            imageFiles = filteredFiles;
             initViewer();
-        });
+        }
 
-        // 2. 뷰어 초기화 (1000장의 빈 상자 만들기 및 드롭다운 세팅)
+        // 각 input의 값이 변했을 때(파일/폴더가 선택되었을 때) 실행
+        fileInput.addEventListener('change', (e) => processFiles(e.target.files));
+        folderInput.addEventListener('change', (e) => processFiles(e.target.files));
+
+        // 뷰어 초기화
         function initViewer() {
-            viewerContainer.innerHTML = ''; // 기존 내용 지우기
+            viewerContainer.innerHTML = '';
             pageJumpSelect.innerHTML = '<option value="">페이지 이동</option>';
 
             imageFiles.forEach((file, index) => {
-                // 상자(Container) 생성
                 const container = document.createElement('div');
                 container.className = 'img-container';
                 container.id = `page-${index}`;
-                container.dataset.index = index; // 인덱스 저장
+                container.dataset.index = index;
                 
-                // 로딩 스피너 역할의 텍스트 미리 넣기
                 container.innerHTML = `<span style="color:#666;">Loading #${index + 1}...</span>`;
-                
                 viewerContainer.appendChild(container);
 
-                // 드롭다운에 페이지 번호 추가
                 const option = document.createElement('option');
                 option.value = index;
                 option.textContent = `#${index + 1} 페이지`;
                 pageJumpSelect.appendChild(option);
 
-                // 상자들을 관찰자(Observer)에 등록
                 imageObserver.observe(container);
             });
             
-            // 맨 처음으로 스크롤 이동
             window.scrollTo(0, 0);
         }
 
-        // 3. 성능 최적화의 핵심: Intersection Observer (가상 로딩 구현)
+        // Intersection Observer (실시간 로딩/메모리 해제 최적화)
         const imageObserver = new IntersectionObserver((entries, observer) => {
             entries.forEach(entry => {
                 const container = entry.target;
                 const index = container.dataset.index;
 
-                // 상자가 화면에 가까워졌을 때 (렌더링)
                 if (entry.isIntersecting) {
                     if (!container.dataset.loaded) {
                         const file = imageFiles[index];
@@ -182,45 +202,32 @@
                         `;
                         container.dataset.loaded = "true";
                     }
-                } 
-                // 상자가 화면에서 멀어졌을 때 (메모리 해제)
-                else {
+                } else {
                     if (container.dataset.loaded) {
-                        // 스크롤이 튀지 않도록 현재 그려진 이미지의 높이를 상자에 고정시킴
                         const currentHeight = container.getBoundingClientRect().height;
                         container.style.minHeight = `${currentHeight}px`;
                         
-                        // 내용물(이미지)을 삭제하여 메모리 반환
                         container.innerHTML = `<span style="color:#666;">Loading #${Number(index) + 1}...</span>`;
                         container.removeAttribute('dataset.loaded');
                         delete container.dataset.loaded;
                     }
                 }
             });
-        }, {
-            // 화면 위아래로 150% 만큼의 여유 공간을 두고 미리 로딩 시작
-            rootMargin: "150% 0px 150% 0px" 
-        });
+        }, { rootMargin: "150% 0px 150% 0px" });
 
-        // 4. 페이지 점프 (드롭다운 변경 시) 기능
+        // 페이지 점프
         pageJumpSelect.addEventListener('change', (e) => {
             const targetIndex = e.target.value;
             if (targetIndex === "") return;
 
             const targetContainer = document.getElementById(`page-${targetIndex}`);
             if (targetContainer) {
-                // 해당 상자로 부드럽게 스크롤 이동 (상단 헤더 높이 60px을 고려하여 이동)
                 const headerOffset = 60;
                 const elementPosition = targetContainer.getBoundingClientRect().top;
                 const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
 
-                window.scrollTo({
-                    top: offsetPosition,
-                    behavior: "auto" // 모바일에서는 즉시 이동(auto)이 더 안정적임
-                });
+                window.scrollTo({ top: offsetPosition, behavior: "auto" });
             }
-            
-            // 이동 후 드롭다운 초기화
             e.target.value = "";
         });
     </script>
