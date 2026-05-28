@@ -76,24 +76,24 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            background-color: #000;
         }
 
         .img-container {
             width: 100%;
             max-width: 800px;
-            min-height: 80vh;
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #222;
-            border-bottom: 2px solid #111;
+            display: block;
+            background-color: #000;
+            line-height: 0;
+            overflow: hidden;
         }
 
         .img-container img {
             width: 100%;
             height: auto;
             display: block;
+            vertical-align: top;
         }
 
         .page-badge {
@@ -106,6 +106,7 @@
             border-radius: 15px;
             font-size: 14px;
             font-weight: bold;
+            line-height: normal;
             z-index: 10;
         }
     </style>
@@ -138,6 +139,12 @@
         const viewerContainer = document.getElementById('viewer-container');
         const pageJumpSelect = document.getElementById('page-jump');
         let imageFiles = [];
+        let imageUrls = [];
+
+        function releaseImageUrls() {
+            imageUrls.forEach(url => URL.revokeObjectURL(url));
+            imageUrls = [];
+        }
 
         // 파일 및 폴더 업로드 공통 처리 함수
         function processFiles(files) {
@@ -162,6 +169,7 @@
 
         // 뷰어 초기화
         function initViewer() {
+            releaseImageUrls();
             viewerContainer.innerHTML = '';
             pageJumpSelect.innerHTML = '<option value="">페이지 이동</option>';
 
@@ -170,50 +178,25 @@
                 container.className = 'img-container';
                 container.id = `page-${index}`;
                 container.dataset.index = index;
-                
-                container.innerHTML = `<span style="color:#666;">Loading #${index + 1}...</span>`;
+                const imgUrl = URL.createObjectURL(file);
+                imageUrls.push(imgUrl);
+
+                container.innerHTML = `
+                    <div class="page-badge">#${index + 1}</div>
+                    <img src="${imgUrl}" alt="page ${index + 1}">
+                `;
                 viewerContainer.appendChild(container);
 
                 const option = document.createElement('option');
                 option.value = index;
                 option.textContent = `#${index + 1} 페이지`;
                 pageJumpSelect.appendChild(option);
-
-                imageObserver.observe(container);
             });
             
             window.scrollTo(0, 0);
         }
 
-        // Intersection Observer (실시간 로딩/메모리 해제 최적화)
-        const imageObserver = new IntersectionObserver((entries, observer) => {
-            entries.forEach(entry => {
-                const container = entry.target;
-                const index = container.dataset.index;
-
-                if (entry.isIntersecting) {
-                    if (!container.dataset.loaded) {
-                        const file = imageFiles[index];
-                        const imgUrl = URL.createObjectURL(file);
-                        
-                        container.innerHTML = `
-                            <div class="page-badge">#${Number(index) + 1}</div>
-                            <img src="${imgUrl}" alt="page ${index + 1}">
-                        `;
-                        container.dataset.loaded = "true";
-                    }
-                } else {
-                    if (container.dataset.loaded) {
-                        const currentHeight = container.getBoundingClientRect().height;
-                        container.style.minHeight = `${currentHeight}px`;
-                        
-                        container.innerHTML = `<span style="color:#666;">Loading #${Number(index) + 1}...</span>`;
-                        container.removeAttribute('dataset.loaded');
-                        delete container.dataset.loaded;
-                    }
-                }
-            });
-        }, { rootMargin: "150% 0px 150% 0px" });
+        window.addEventListener('beforeunload', releaseImageUrls);
 
         // 페이지 점프
         pageJumpSelect.addEventListener('change', (e) => {
